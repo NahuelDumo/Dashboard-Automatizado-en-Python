@@ -1,31 +1,39 @@
 ========================================
-      STREAMLIT APP PORTABLE
+    STREAMLIT APP PORTABLE - README
 ========================================
 
-INSTRUCCIONES DE INSTALACIÓN:
+INSTALACIÓN RÁPIDA:
+1. Ejecuta: install.bat
+   - Descargará Python portable
+   - Instalará todas las dependencias automáticamente
 
-1. PRIMERA VEZ - INSTALACIÓN:
-   - Ejecuta 'INSTALL.bat'
-   - Requiere conexión a internet
-   - El proceso tarda 5-10 minutos
+2. Ejecuta: run_app.bat  
+   - Iniciará la aplicación Streamlit
+   - Se abrirá automáticamente en http://localhost:8501
 
-2. USO DIARIO:
-   - Ejecuta 'run_app.bat'
-   - Se abre en: http://localhost:8501
+ARCHIVOS INCLUIDOS:
+- install.bat ...................... Instalador principal
+- run_app.bat ...................... Ejecutar aplicación
+- toggle_auto_update.bat ........... Configurar auto-actualización
+- app.py ........................... Aplicación principal de Streamlit
+- version.txt ...................... Versión del paquete
+- README.txt ....................... Este archivo
 
-REQUISITOS:
-- Windows 10/11
-- Conexión a internet (solo primera vez)
-- ~500MB espacio libre
+REQUISITOS DEL SISTEMA:
+- Windows 10 o superior
+- Conexión a internet (solo para la instalación inicial)
+- Aproximadamente 150MB de espacio libre
 
 SOLUCIÓN DE PROBLEMAS:
-- Si falla la descarga: verificar internet
-- Si no abre el navegador: ir a http://localhost:8501
-- Para cerrar: Ctrl+C en la ventana negra
+- Si hay errores de instalación, ejecuta install.bat como administrador
+- Si la aplicación no inicia, verifica que install.bat se ejecutó correctamente
+- Para detener la aplicación, presiona Ctrl+C en la ventana de comandos
 
-ARCHIVOS:
-- INSTALL.bat    = Instalar (solo primera vez)
-- run_app.bat    = Ejecutar aplicación
-- app.py         = Aplicación principal
-- assets/        = Recursos de la aplicación
-- utils/         = Utilidades
+DESINSTALACIÓN:
+Para desinstalar, simplemente elimina toda la carpeta.
+No se instalan archivos en otras ubicaciones del sistema.
+
+========================================
+Para soporte técnico, revisa los mensajes de error
+que aparecen durante la instalación o ejecución.
+========================================
