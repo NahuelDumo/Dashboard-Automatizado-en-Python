@@ -4,7 +4,7 @@ from datetime import datetime
 from utils.data_loader import load_multiple_excels
 from utils.processor import process_data, build_global_summary, prepare_yoy_data
 from utils.plotter import plot_yoy_comparison, plot_channel_breakdown, plot_volume_mix, plot_yearly_totals
-from utils.exporter import export_to_excel
+from utils.exporter import export_to_excel, export_clientes_y_sabores
 
 st.set_page_config(page_title="📊 Dashboard CCU", layout="wide")
 st.title("📊 Dashboard CCU - Consolidado Global")
@@ -29,7 +29,7 @@ with col3:
     cartera_manual = st.number_input("👥 Cartera", min_value=0, value=1000)
 
 if uploaded_files:
-    df = load_multiple_excels(uploaded_files)
+    df, planes_data = load_multiple_excels(uploaded_files)
 
     # Excluir las familias 'POP' y 'PALLETS' de todos los análisis
     if 'Grupo' in df.columns:
@@ -106,6 +106,34 @@ if uploaded_files:
     if cliente:
         df_para_filtros = df_para_filtros[df_para_filtros["RazonSocial"].isin(cliente)]
 
+    # Filtro de Plan (solo si se cargó archivo PLANES)
+    if planes_data:
+        st.markdown("#### 📋 Filtro por Plan")
+        plan_options = sorted(planes_data.keys())
+        plan_seleccionado = st.selectbox(
+            "Seleccionar Plan (filtro por códigos de clientes del plan)",
+            ["Todos los planes"] + plan_options,
+            help="Si seleccionas un plan específico, solo se mostrarán los datos de los clientes que pertenecen a ese plan"
+        )
+        
+        if plan_seleccionado != "Todos los planes":
+            # Filtrar por códigos de clientes del plan seleccionado
+            codigos_plan = planes_data[plan_seleccionado]
+            # Convertir CodigoCliente a string para la comparación
+            df_para_filtros_plan = df_para_filtros[
+                df_para_filtros["CodigoCliente"].astype(str).isin(codigos_plan)
+            ].copy()
+            
+            # Mostrar información del filtro aplicado
+            st.info(f"📋 Plan aplicado: {plan_seleccionado} ({len(codigos_plan)} clientes en el plan)")
+            if len(df_para_filtros_plan) > 0:
+                clientes_encontrados = df_para_filtros_plan["CodigoCliente"].nunique()
+                st.success(f"✅ Se encontraron {clientes_encontrados} clientes del plan con datos en el período seleccionado")
+            else:
+                st.warning("⚠️ No se encontraron datos para los clientes de este plan en el período seleccionado")
+            
+            df_para_filtros = df_para_filtros_plan
+
     df_filtrado = df_para_filtros.copy()
 
     st.subheader("📊 Resumen consolidado del último mes")
@@ -138,18 +166,40 @@ if uploaded_files:
         col10.metric("CCE Agua Pura", f"{resumen['CCE Agua Pura'].iloc[0]:.1f}")
     if 'CCE Agua Saborizada' in resumen.columns:
         col11.metric("CCE Agua Saborizada", f"{resumen['CCE Agua Saborizada'].iloc[0]:.1f}")
-    
+    col12.metric(
+        "Sabores por PV (Levite)",
+        f"{resumen['Sabores por PV (Levite)'].iloc[0]:.2f}"
+    )
     # Quinta fila - Otras métricas de productos
     col13, col14, col15 = st.columns(3)
     col13.metric("Drop (Bultos/Clientes)", f"{resumen['Drop (Bultos/Clientes)'].iloc[0]:.1f}")
     col14.metric("Dif Bruto - Neto", f"${resumen['Diferencia Bruto - Neto'].iloc[0]:.1f}")
-    col15.metric("Sabores por PV (Levite)", f"{resumen['Sabores por PV (Levite)'].iloc[0]:.1f}")
     
     # Sexta fila - Métricas adicionales
-    col16, col17, col18 = st.columns(3)
-    col16.metric("Cartera", f"{resumen['Cartera'].iloc[0]:.1f}")
+    col15.metric("Cartera", f"{resumen['Cartera'].iloc[0]:.1f}")
 
-
+    # ===== NUEVO BOTÓN DE EXPORTACIÓN CCC ÑANDÚ Y PV LEVITE =====
+    st.markdown("---")
+    st.markdown("### 📋 Exportar Información Detallada de Indicadores")
+    
+    if st.button("📊 Exportar CCC Ñandú y PV LEVITE", 
+                help="Descargar un archivo Excel con el detalle de clientes que conforman los indicadores CCC Ñandú y PV Levite"):
+        try:
+            # Llamar a la función de exportación con los datos ya procesados
+            excel_data, filename = export_clientes_y_sabores(df_filtrado)
+            
+            # Crear el botón de descarga
+            st.download_button(
+                label="⬇️ Descargar archivo Excel",
+                data=excel_data,
+                file_name=filename,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            st.success("✅ Archivo generado correctamente. Haz clic en el botón de descarga.")
+        except Exception as e:
+            st.error(f"❌ Error al generar el archivo: {str(e)}")
+    
+    st.markdown("---")
     st.markdown("<h3 style='text-align: center;'> Gráficos de Comparación Anual</h3>", unsafe_allow_html=True)
 
     # Preparar datos para los gráficos

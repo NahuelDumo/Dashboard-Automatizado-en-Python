@@ -14,6 +14,11 @@ def process_data(df, date_from, date_to):
     def extract_bultos(descripcion):
         match = re.search(r"(\d+)\s*[xX]", str(descripcion))
         return int(match.group(1)) if match else 1
+        
+    # Filtrar para que 'ccc ñandu' solo aparezca con calibre 330
+    mask_ccc = df['Descripcion'].str.contains('ñandu', case=False, na=False)
+    mask_calibre = ~df['Descripcion'].str.contains('330', na=False)
+    df = df[~(mask_ccc & mask_calibre)].copy()
 
     df.columns = df.columns.str.strip()
 
@@ -163,10 +168,15 @@ def build_global_summary(df, date_to, salidas_mes, salidas_actuales, cartera_man
 
     # 8. Sabores por PV -> Solo LEVITE. Promedio de sabores distintos por CodigoCliente
     #    (equivale a Cantidad de sabores comprados por código / Total compradores)
+    #    Se excluye explícitamente el sabor "limonada" del cálculo
     if not df_completo.empty and "Marcas" in df_completo.columns and "Descripcion" in df_completo.columns:
         marcas_norm = df_completo["Marcas"].astype(str).str.strip()
+        desc_norm = df_completo["Descripcion"].astype(str).str.lower()
+        
+        # Filtrar solo productos de marca LEVITE con ventas positivas
         mask_levite = marcas_norm.str.contains(r"\bLEVITE\b", case=False, na=False)
         df_levite = df_completo[mask_levite & (df_completo.get("Kg_Lt", 0) > 0)].copy()
+        
         if not df_levite.empty:
             # Denominador: compradores de LEVITE (con venta > 0)
             compradores_levite = df_levite["CodigoCliente"].nunique()
@@ -176,17 +186,28 @@ def build_global_summary(df, date_to, salidas_mes, salidas_actuales, cartera_man
             import re
             extraido = df_levite["Descripcion"].astype(str).str.lower().str.extract(r"levite\s+([a-záéíóúñ]+(?:\s+[a-záéíóúñ]+)?)")[0]
             df_levite["Sabor"] = extraido.fillna("").str.strip().str.title()
-            sabores_por_cliente = df_levite[df_levite["Sabor"] != ""].groupby("CodigoCliente")["Sabor"].nunique()
-
-            suma_sabores = sabores_por_cliente.sum()
-            print(f"DEBUG Sabores-PV Levite -> Suma de sabores distintos entre clientes: {suma_sabores}")
-            productos_por_cliente = (suma_sabores / compradores_levite) if compradores_levite else 0
-            print(f"DEBUG Sabores-PV Levite -> Resultado KPI (suma_sabores/compradores): {productos_por_cliente}")
+            
+            # Filtrar sabores válidos (no vacíos y que no sean "limonada")
+            df_levite = df_levite[
+                (df_levite["Sabor"] != "") & 
+                (~df_levite["Sabor"].str.contains(r"limonada", case=False, na=False))
+            ]
+            
+            if not df_levite.empty:
+                sabores_por_cliente = df_levite.groupby("CodigoCliente")["Sabor"].nunique()
+                suma_sabores = sabores_por_cliente.sum()
+                print(f"DEBUG Sabores-PV Levite -> Suma de sabores distintos entre clientes (excluyendo 'limonada'): {suma_sabores}")
+                productos_por_cliente = (suma_sabores / compradores_levite) if compradores_levite > 0 else 0
+                print(f"DEBUG Sabores-PV Levite -> Resultado KPI (suma_sabores/compradores): {productos_por_cliente}")
+            else:
+                print("DEBUG Sabores-PV Levite -> No se encontraron sabores válidos después de excluir 'limonada'")
+                productos_por_cliente = 0
         else:
+            print("DEBUG Sabores-PV Levite -> No hay datos válidos después de filtrar")
             productos_por_cliente = 0
     else:
+        print("DEBUG Sabores-PV Levite -> No se pudo calcular: faltan columnas requeridas")
         productos_por_cliente = 0
-
     # 9. CCC Ñandú -> Clientes con compra de 2 o 3 marcas entre: Heineken, Miller, Imperial Golden
     import unicodedata
     def _sin_acentos(s):
@@ -197,11 +218,18 @@ def build_global_summary(df, date_to, salidas_mes, salidas_actuales, cartera_man
         marcas_norm = df_completo["Marcas"].apply(_sin_acentos)
         desc_norm = df_completo["Descripcion"].apply(_sin_acentos)
 
+        # Crear máscara para calibre 330 (buscando "330" en la descripción)
+        mask_calibre_330 = df_completo["Descripcion"].astype(str).str.contains(r"\b330\b", na=False)
+        
+        # Máscaras para cada marca de porrón
         mask_heineken = marcas_norm.str.contains("heineken", na=False)
         mask_miller = marcas_norm.str.contains("miller", na=False)
         mask_imperial_golden = marcas_norm.str.contains("imperial", na=False) & desc_norm.str.contains("golden", na=False)
 
-        df_ccu = df_completo[(mask_heineken | mask_miller | mask_imperial_golden) & (df_completo.get("Kg_Lt", 0) > 0)].copy()
+        # Filtrar solo registros con calibre 330
+        df_ccu = df_completo[mask_calibre_330 & (df_completo.get("Kg_Lt", 0) > 0)].copy()
+        
+        print(f"DEBUG CCC Ñandú -> Total registros con calibre 330: {len(df_ccu)}")
 
         # Etiquetar la marca del set objetivo
         import numpy as np
@@ -227,7 +255,7 @@ def build_global_summary(df, date_to, salidas_mes, salidas_actuales, cartera_man
         marcas_por_cliente = marcas_por_cliente.groupby("CodigoCliente")["MarcaCCC"].nunique()
         
         # Finalmente contamos los que tienen 2 o más marcas
-        ccc_nandu = (marcas_por_cliente >= 2).sum()
+        ccc_nandu = (marcas_por_cliente > 1).sum()
 
         # Debug
         print(f"DEBUG CCC Ñandú -> Heineken rows: {mask_heineken.sum()}, Miller rows: {mask_miller.sum()}, Imperial Golden rows: {mask_imperial_golden.sum()}")
@@ -260,7 +288,7 @@ def build_global_summary(df, date_to, salidas_mes, salidas_actuales, cartera_man
         "Cartera": round(cartera_manual, 1),
         "Cobertura": f"{cobertura*100:.1f}%",
         "Drop (Bultos/Clientes)": round(drop, 1),
-        "Sabores por PV (Levite)": round(productos_por_cliente, 1),
+        "Sabores por PV (Levite)": productos_por_cliente,
         "CCC Ñandú (Multi-marca)": round(ccc_nandu, 1),
         "$ Bruto": round(bruto, 1),
         "$ Neto": round(neto, 1),
